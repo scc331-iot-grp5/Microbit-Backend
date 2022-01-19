@@ -288,6 +288,21 @@ void receive(MicroBitEvent e)
             messageCount = messageCount +1;
             uBit.serial.printf(message.toCharArray());
         }
+	else if (p[0] == CRASH_EVENT && (convertSerials(p[5],p[6],p[7],p[8]) == emptySerialValue))
+	{
+		ManagedString comma(",");
+		ManagedString header("Crash");
+		ManagedString boatSerial(convertSerials(p[1],p[2],p[3],p[4]));
+		ManagedString ID(messageCount);
+	        ManagedString end("\n");
+
+		ManagedString message = ID + comma + header + comma + boatSerial + comma +end; // message to send to webserver
+
+		messageCount = messageCount +1;
+
+		uBit.serial.printf(message.toCharArray());
+
+    	}
     }
 }
 void recieveLoop()
