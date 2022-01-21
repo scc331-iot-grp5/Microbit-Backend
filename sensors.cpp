@@ -13,6 +13,7 @@ MicroBit uBit;
 ManagedString serial;
 ManagedString emptySerialValue("0000");
 int messageCount = 0;
+int heartBeat = 0;
 
 int microbitType = 0;//default as sensor
 
@@ -164,6 +165,7 @@ void requestData()
     memcpy(buf, &msgType, 1);
 	memcpy(buf+1, serial.toCharArray(), 4);
 	memcpy(buf+5, emptySerialValue.toCharArray(), 4);
+    memcpy(buf+9, &heartBeat, 1);
 
     broadcast(data);
     //uBit.serial.printf("I'm hedddddddddddddre\n");
@@ -182,6 +184,7 @@ void receive(MicroBitEvent e)
             ManagedString direction;
             ManagedString temp;
             ManagedString acc(getAccerlation());
+            int hb = p[9];
 
             if(recordTemp == 1)
             {
@@ -207,7 +210,7 @@ void receive(MicroBitEvent e)
                 //uBit.serial.printf("not recording direction");
             }
 
-            PacketBuffer data(18);
+            PacketBuffer data(20);
             uint8_t *buf = data.getBytes();
             int msgType = DATA;
             memcpy(buf, &msgType, 1);
@@ -216,6 +219,7 @@ void receive(MicroBitEvent e)
             memcpy(buf+9, direction.toCharArray(), 3);
             memcpy(buf+12, temp.toCharArray(), 3);
             memcpy(buf+15, acc.toCharArray(), 3);
+            memcpy(buf+18, &hb, 1);
 
             broadcast(data);
 
@@ -262,6 +266,8 @@ void receive(MicroBitEvent e)
             ManagedString Direction(convertDirection(p[9],p[10],p[11]));
             ManagedString temp(convertDirection(p[12],p[13],p[14]));
             ManagedString acc(convertDirection(p[15],p[16],p[17]));
+            int hb = p[18];
+            ManagedString hb2(hb);
 
             ManagedString header("Data");
             ManagedString end("\n");
@@ -269,7 +275,7 @@ void receive(MicroBitEvent e)
             int rssiValue = p.getRSSI();
             ManagedString n(rssiValue);
             
-            ManagedString message = ID + comma +header + comma + serial + comma + objSerial + comma + Direction + comma + temp + comma + acc + comma + n + end; // message to send to webserver
+            ManagedString message = ID + comma +header + comma + serial + comma + objSerial + comma + Direction + comma + temp + comma + acc + comma + n + comma + hb2 + end; // message to send to webserver
             messageCount = messageCount +1;
 
             uBit.serial.printf(message.toCharArray());
@@ -283,8 +289,9 @@ void receive(MicroBitEvent e)
             ManagedString header("NBBData");
             ManagedString end("\n");
             ManagedString ID(messageCount);
+            ManagedString hb(heartBeat);
 
-            ManagedString message = ID + comma + header + comma + objSerial + comma + nearBoatSerial + comma + rssiValue + comma +end;
+            ManagedString message = ID + comma + header + comma + objSerial + comma + nearBoatSerial + comma + rssiValue + comma + hb + comma + end;
             messageCount = messageCount +1;
             uBit.serial.printf(message.toCharArray());
         }
@@ -377,7 +384,15 @@ int main()
     create_fiber(recieveLoop);
     while(1)
     {	
-		uBit.sleep(10000);	
+		uBit.sleep(10000);
+        int a = getAccerlation();
+        ManagedString acc(a);
+        ManagedString end("\n");
+        ManagedString comma(",");
+        ManagedString temp = uBit.thermometer.getTemperature();
+        ManagedString mes = serial + comma + acc + comma + temp + comma + end;
+        uBit.serial.printf(mes.toCharArray());
+
         if (microbitType == 1)
         {
             requestData();
