@@ -7,7 +7,8 @@
 #define RSSI_DATA            5
 
 #define CRASH_EVENT          10
-#define SHAKE_THRESHOLD      150
+#define POSSIBLE_CRASH       11
+#define SHAKE_THRESHOLD      60
 
 MicroBit uBit;
 ManagedString serial;
@@ -17,9 +18,64 @@ int heartBeat = 0;
 
 int microbitType = 0;//default as sensor
 
-int recordTemp = 0; // 0 = dont record
-int recordDirection = 0;
-int recordAcc = 0;
+int recordTemp = 1; // 1 = record
+int recordDirection = 1;
+int recordAcc = 1;
+
+
+static Pin *pin = &uBit.audio.virtualOutputPin;
+static uint8_t pitchVolume = 0xff;
+
+enum Note {
+    C = 262,
+    CSharp = 277,
+    D = 294,
+    Eb = 311,
+    E = 330,
+    F = 349,
+    FSharp = 370,
+    G = 392,
+    GSharp = 415,
+    A = 440,
+    Bb = 466,
+    B = 494,
+    C3 = 131,
+    CSharp3 = 139,
+    D3 = 147,
+    Eb3 = 156,
+    E3 = 165,
+    F3 = 175,
+    FSharp3 = 185,
+    G3 = 196,
+    GSharp3 = 208,
+    A3 = 220,
+    Bb3 = 233,
+    B3 = 247,
+    C4 = 262,
+    CSharp4 = 277,
+    D4 = 294,
+    Eb4 = 311,
+    E4 = 330,
+    F4 = 349,
+    FSharp4 = 370,
+    G4 = 392,
+    GSharp4 = 415,
+    A4 = 440,
+    Bb4 = 466,
+    B4 = 494,
+    C5 = 523,
+    CSharp5 = 555,
+    D5 = 587,
+    Eb5 = 622,
+    E5 = 659,
+    F5 = 698,
+    FSharp5 = 740,
+    G5 = 784,
+    GSharp5 = 831,
+    A5 = 880,
+    Bb5 = 932,
+    B5 = 988,
+};
 
 //request for temp, directional bearing.
     //on signal - request rssi (sensor to sensor)
@@ -90,6 +146,27 @@ ManagedString getDirection()
 	return "---";
     //for loop of each section increase 
 }
+void analogPitch(int frequency, int ms) {
+    if (frequency <= 0 || pitchVolume == 0) {
+        pin->setAnalogValue(0);
+    } else { 
+        pin->setAnalogValue(100);
+        pin->setAnalogPeriodUs(1000000/frequency);
+    }
+    if (ms > 0) {
+        fiber_sleep(ms);
+        pin->setAnalogValue(0);
+        fiber_sleep(5);
+    }
+}
+ManagedString convertTwo(char data, char data2)
+{
+    ManagedString sh1(data);
+    ManagedString sh2(data2);
+
+    ManagedString finalDirection(sh1+sh2);
+    return finalDirection;
+}
 ManagedString convertDirection(char data, char data2, char data3)
 {
     ManagedString sh1(data);
@@ -137,6 +214,55 @@ int getAccerlation()
     int z = uBit.accelerometer.getZ();
 
     return sqrt((x^2) + (y^2) + (z^2));
+}
+void flash()
+{
+    uBit.display.disable();
+    uBit.io.row1.setDigitalValue(1);
+    uBit.io.row2.setDigitalValue(1);
+    uBit.io.row3.setDigitalValue(1);
+    uBit.io.row4.setDigitalValue(1);
+    uBit.io.row5.setDigitalValue(1);
+
+    for (int i = 0; i < 3; i++) 
+    {
+        uBit.io.col1.setDigitalValue(0);
+        uBit.io.col2.setDigitalValue(0);
+        uBit.io.col3.setDigitalValue(0);
+        uBit.io.col4.setDigitalValue(0);
+        uBit.io.col5.setDigitalValue(0);
+        uBit.sleep(500);
+
+        uBit.io.col1.setDigitalValue(1);
+        uBit.io.col2.setDigitalValue(1);
+        uBit.io.col3.setDigitalValue(1);
+        uBit.io.col4.setDigitalValue(1);
+        uBit.io.col5.setDigitalValue(1);
+        uBit.sleep(500);
+    }
+    uBit.display.enable();
+}
+void playSOS() {
+    const int beat = 250;
+	const int beat2 = 500;
+    analogPitch(Note::E, beat);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat2);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat2);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat2);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat);
+    uBit.sleep(250);
+    analogPitch(Note::E, beat);
+  
 }
 void sendCrashSignal()
 {		
@@ -210,16 +336,16 @@ void receive(MicroBitEvent e)
                 //uBit.serial.printf("not recording direction");
             }
 
-            PacketBuffer data(20);
+            PacketBuffer data(17);
             uint8_t *buf = data.getBytes();
             int msgType = DATA;
             memcpy(buf, &msgType, 1);
             memcpy(buf+1, serial.toCharArray(), 4);
             memcpy(buf+5, source.toCharArray(), 4);
             memcpy(buf+9, direction.toCharArray(), 3);
-            memcpy(buf+12, temp.toCharArray(), 3);
-            memcpy(buf+15, acc.toCharArray(), 3);
-            memcpy(buf+18, &hb, 1);
+            memcpy(buf+12, temp.toCharArray(), 2);
+            memcpy(buf+14, acc.toCharArray(), 2);
+            memcpy(buf+16, &hb, 1);
 
             broadcast(data);
 
@@ -255,6 +381,11 @@ void receive(MicroBitEvent e)
                 
             broadcast(data);
         }
+        else if(p[0] == POSSIBLE_CRASH && (convertSerials(p[5],p[6],p[7],p[8]) == serial))
+        {
+            create_fiber(playSOS);
+            create_fiber(flash);
+        }
     }
     else if (microbitType == 1)
     {
@@ -264,10 +395,10 @@ void receive(MicroBitEvent e)
             ManagedString comma(",");
             ManagedString objSerial(convertSerials(p[1],p[2],p[3],p[4]));
             ManagedString Direction(convertDirection(p[9],p[10],p[11]));
-            ManagedString temp(convertDirection(p[12],p[13],p[14]));
-            ManagedString acc(convertDirection(p[15],p[16],p[17]));
-            int hb = p[18];
-            ManagedString hb2(hb);
+            ManagedString temp(convertTwo(p[12],p[13]));
+            ManagedString acc(convertTwo(p[14],p[15]));
+           
+            ManagedString hb2(heartBeat);
 
             ManagedString header("Data");
             ManagedString end("\n");
@@ -275,10 +406,16 @@ void receive(MicroBitEvent e)
             int rssiValue = p.getRSSI();
             ManagedString n(rssiValue);
             
-            ManagedString message = ID + comma +header + comma + serial + comma + objSerial + comma + Direction + comma + temp + comma + acc + comma + n + comma + hb2 + end; // message to send to webserver
+            heartBeat++;
+
+            ManagedString messagePart1 = ID + comma +header + comma + serial + comma + objSerial + comma + Direction;
+            ManagedString messagePart2 = comma + temp + comma + acc ; // message to send to webserver
+            ManagedString messagePart3 = comma + n + comma + hb2 + end;
             messageCount = messageCount +1;
 
-            uBit.serial.printf(message.toCharArray());
+            uBit.serial.printf(messagePart1.toCharArray());
+            uBit.serial.printf(messagePart2.toCharArray());
+            uBit.serial.printf(messagePart3.toCharArray());
         }
         else if ((p[0] == RSSI_DATA) && (convertSerials(p[5],p[6],p[7],p[8]) == "0000"))
 	    {
@@ -312,39 +449,60 @@ void receive(MicroBitEvent e)
     	}
     }
 }
+
 void recieveLoop()
 {
+    ManagedString address;
     ManagedString end("\n");
     ManagedString x;
+    ManagedString messageToSend;
     //uBit.serial.printf("I'm here\n");
     while(1)
     {
-        //uBit.serial.printf("I'm in here\n");
         x = uBit.serial.readUntil(end);
-        //uBit.serial.printf(x.toCharArray());
-        if(x == 1){//record temp
+        int len =  x.length();
+        address = x.substring(0,4);
+        uBit.serial.printf(address.toCharArray());
+        messageToSend = x.substring(4,len-4);
+        uBit.serial.printf(messageToSend.toCharArray());
+        uBit.serial.printf("\n");
+
+        if(messageToSend == 1){//record temp
             recordTemp = 1;
         }
-        if(x == 2){//dont record temp
+        if(messageToSend == 2){//dont record temp
             recordTemp = 0;
         }
-        if(x == 3){//record direc
+        if(messageToSend == 3){//record direc
             recordDirection = 1;
         }
-        if(x == 4){//dont record direc
+        if(messageToSend == 4){//dont record direc
             recordDirection = 0;
         }
-        if(x == 5){//record aCC
+        if(messageToSend == 5){//record aCC
             recordAcc = 1;
         }
-        if(x == 6){//dont record ACC
+        if(messageToSend == 6){//dont record ACC
             recordAcc = 0;
         }
-        if(x == 7){//record TYPE
+        if(messageToSend == 7){//record TYPE
             microbitType = 1;
+            uBit.serial.printf("infra\n");
         }
-        if(x == 8){//dont record TYPE
+        if(messageToSend == 8){//dont record TYPE
             microbitType = 0;
+            uBit.serial.printf("sensor\n");
+        }
+        if(messageToSend == 100)//alert to possible crash
+        {
+            PacketBuffer data(13);
+            uint8_t *buf = data.getBytes();
+            int msgType = POSSIBLE_CRASH;
+            memcpy(buf, &msgType, 1);
+            memcpy(buf+1, serial.toCharArray(), 4);
+            memcpy(buf+5, address.toCharArray(), 4);
+
+            broadcast(data);
         }
         //uBit.sleep(2500);
 
@@ -384,20 +542,13 @@ int main()
     create_fiber(recieveLoop);
     while(1)
     {	
-		uBit.sleep(10000);
-        int a = getAccerlation();
-        ManagedString acc(a);
-        ManagedString end("\n");
-        ManagedString comma(",");
-        ManagedString temp = uBit.thermometer.getTemperature();
-        ManagedString mes = serial + comma + acc + comma + temp + comma + end;
-        uBit.serial.printf(mes.toCharArray());
-
+		uBit.sleep(5000);
         if (microbitType == 1)
         {
-            requestData();
+            requestData();  
+            uBit.serial.printf("requestData\n");
         }
-        //uBit.serial.printf("I'm \n");
+        uBit.sleep(5000);
     }
 }
 	
