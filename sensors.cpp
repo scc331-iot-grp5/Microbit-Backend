@@ -9,6 +9,11 @@
 #define CRASH_EVENT          10
 #define POSSIBLE_CRASH       11
 #define SHAKE_THRESHOLD      60
+#define PERSON_IN_CAR        20
+#define PERSON_IN_CAR_2      21
+#define SPEED                30
+#define ROADTYPE             32
+
 
 MicroBit uBit;
 ManagedString serial;
@@ -22,6 +27,19 @@ int recordTemp = 1; // 1 = record
 int recordDirection = 1;
 int recordAcc = 1;
 
+const char * const oneWay ="\
+    000,000,255,000,000\n\
+    000,255,255,255,000\n\
+    000,000,255,000,000\n\
+    000,000,255,000,000\n\
+    000,000,255,000,000\n";
+
+const char * const twoWay ="\
+    000,255,000,255,000\n\
+    000,255,000,255,000\n\
+    000,255,000,255,000\n\
+    000,255,000,255,000\n\
+    000,255,000,255,000\n";
 
 static Pin *pin = &uBit.audio.virtualOutputPin;
 static uint8_t pitchVolume = 0xff;
@@ -386,6 +404,36 @@ void receive(MicroBitEvent e)
             create_fiber(playSOS);
             create_fiber(flash);
         }
+        else if(p[0] == PERSON_IN_CAR && (convertSerials(p[5],p[6],p[7],p[8]) == serial))
+        {
+            uBit.display.printAsync("X");
+        }
+        else if(p[0] == PERSON_IN_CAR_2 && (convertSerials(p[5],p[6],p[7],p[8]) == serial))
+        {
+            uBit.display.printAsync(" ");
+        }
+        else if(p[0] == SPEED && (convertSerials(p[5],p[6],p[7],p[8]) == serial))
+        {
+            ManagedString temp(convertTwo(p[9],p[10]));
+            uBit.display.print(temp);
+        }
+        else if(p[0] == ROADTYPE && (convertSerials(p[5],p[6],p[7],p[8]) == serial))
+        {
+            ManagedString temp(convertTwo(p[9],p[10]));
+            MicroBitImage success(oneWay);
+            MicroBitImage succesaaas(twoWay);
+            ManagedString one(10);
+            ManagedString two(20);
+            uBit.display.print(success);
+            if(temp == one)
+            {
+                uBit.display.print(success);
+            }
+            else if(temp == two)
+            {
+                uBit.display.print(succesaaas);
+            }
+        }
     }
     else if (microbitType == 1)
     {
@@ -397,8 +445,9 @@ void receive(MicroBitEvent e)
             ManagedString Direction(convertDirection(p[9],p[10],p[11]));
             ManagedString temp(convertTwo(p[12],p[13]));
             ManagedString acc(convertTwo(p[14],p[15]));
+            int hjk = p[16];
            
-            ManagedString hb2(heartBeat);
+            ManagedString hb2(hjk);
 
             ManagedString header("Data");
             ManagedString end("\n");
@@ -406,7 +455,7 @@ void receive(MicroBitEvent e)
             int rssiValue = p.getRSSI();
             ManagedString n(rssiValue);
             
-            heartBeat++;
+            
 
             ManagedString messagePart1 = ID + comma +header + comma + serial + comma + objSerial + comma + Direction;
             ManagedString messagePart2 = comma + temp + comma + acc ; // message to send to webserver
@@ -462,38 +511,41 @@ void recieveLoop()
         x = uBit.serial.readUntil(end);
         int len =  x.length();
         address = x.substring(0,4);
+        ManagedString v = x.substring(4,2);
         uBit.serial.printf(address.toCharArray());
-        messageToSend = x.substring(4,len-4);
+        messageToSend = x.substring(6,2);
+        uBit.serial.printf(v.toCharArray());
+        uBit.serial.printf("\n");
         uBit.serial.printf(messageToSend.toCharArray());
         uBit.serial.printf("\n");
 
-        if(messageToSend == 1){//record temp
+        if(v == 1){//record temp
             recordTemp = 1;
         }
-        if(messageToSend == 2){//dont record temp
+        if(v == 2){//dont record temp
             recordTemp = 0;
         }
-        if(messageToSend == 3){//record direc
+        if(v == 3){//record direc
             recordDirection = 1;
         }
-        if(messageToSend == 4){//dont record direc
+        if(v == 4){//dont record direc
             recordDirection = 0;
         }
-        if(messageToSend == 5){//record aCC
+        if(v == 5){//record aCC
             recordAcc = 1;
         }
-        if(messageToSend == 6){//dont record ACC
+        if(v == 6){//dont record ACC
             recordAcc = 0;
         }
-        if(messageToSend == 7){//record TYPE
+        if(v == 7){//record TYPE
             microbitType = 1;
             uBit.serial.printf("infra\n");
         }
-        if(messageToSend == 8){//dont record TYPE
+        if(v == 8){//dont record TYPE
             microbitType = 0;
             uBit.serial.printf("sensor\n");
         }
-        if(messageToSend == 100)//alert to possible crash
+        if(v == 10)//alert to possible crash
         {
             PacketBuffer data(13);
             uint8_t *buf = data.getBytes();
@@ -504,16 +556,53 @@ void recieveLoop()
 
             broadcast(data);
         }
-        //uBit.sleep(2500);
+        if(v == 50)//alert to possible crash
+        {
+            PacketBuffer data(13);
+            uint8_t *buf = data.getBytes();
+            int msgType = PERSON_IN_CAR;
+            memcpy(buf, &msgType, 1);
+            memcpy(buf+1, serial.toCharArray(), 4);
+            memcpy(buf+5, address.toCharArray(), 4);
 
-        
-        /*int len =  x.length();
-        address = x.substring(0,4);
-        uBit.serial.printf(address.toCharArray());
-        messageToSend = x.substring(4,len-4);
-        uBit.serial.printf(messageToSend.toCharArray());
-        create_fiber(sendMessage);
-        address = "1111";*/
+            broadcast(data);
+        }
+        if(v == 51)//alert to possible crash
+        {
+            PacketBuffer data(13);
+            uint8_t *buf = data.getBytes();
+            int msgType = PERSON_IN_CAR_2;
+            memcpy(buf, &msgType, 1);
+            memcpy(buf+1, serial.toCharArray(), 4);
+            memcpy(buf+5, address.toCharArray(), 4);
+
+            broadcast(data);
+        }
+        if(v == 40)//speed 
+        {
+            PacketBuffer data(13);
+            uint8_t *buf = data.getBytes();
+            int msgType = SPEED;
+            memcpy(buf, &msgType, 1);
+            memcpy(buf+1, serial.toCharArray(), 4);
+            memcpy(buf+5, address.toCharArray(), 4);
+            memcpy(buf+9, messageToSend.toCharArray(), 2);
+
+            broadcast(data);
+        }
+        if(v == 45)//speed 
+        {
+            PacketBuffer data(13);
+            uint8_t *buf = data.getBytes();
+            int msgType = ROADTYPE;
+            memcpy(buf, &msgType, 1);
+            memcpy(buf+1, serial.toCharArray(), 4);
+            memcpy(buf+5, address.toCharArray(), 4);
+            memcpy(buf+9, messageToSend.toCharArray(), 1);
+
+            broadcast(data);
+        }
+    
     }
 }
 int main()
@@ -545,8 +634,9 @@ int main()
 		uBit.sleep(5000);
         if (microbitType == 1)
         {
+            heartBeat++;
             requestData();  
-            uBit.serial.printf("requestData\n");
+            //uBit.serial.printf("requestData\n");
         }
         uBit.sleep(5000);
     }
